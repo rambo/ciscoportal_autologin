@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import sys
+import functools
+import time
+
+import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 
@@ -32,35 +36,61 @@ class wait_for_page_load(object):
         wait_for(self.page_has_loaded)
 
 
-def login(username, password):
-    driver = webdriver.Chrome(executable_path='/usr/lib/chromium-browser/chromedriver')
-    driver.get("http://www.google.com")
-
-    if 'Google' in driver.title:
-        # Connection ok
-        print("Not captured, returning early")
-        driver.close()
+def element_found_by_name(driver, name):
+    try:
+        driver.find_element_by_name(name)
         return True
+    except selenium.common.exceptions.NoSuchElementException:
+        return False
 
-    print("Logging in")
-    username_input = driver.find_element_by_name("username")
-    username_input.clear()
-    username_input.send_keys(username)
+def dump_source_and_screen(driver):
+    driver.save_screenshot('screenshot.png')
+    html = driver.page_source
+    with open('source.html', 'wb') as fp:
+        fp.write(html)
 
-    password_input = driver.find_element_by_name("password")
-    password_input.clear()
-    password_input.send_keys(password)
-    with wait_for_page_load(driver):
-        password_input.send_keys(Keys.RETURN)
 
+def login(username, password):
+    chrome_options = webdriver.ChromeOptions()
+    #chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome(executable_path='/usr/lib/chromium-browser/chromedriver', chrome_options=chrome_options)
     ok = False
-    if 'Google' in driver.title:
-        # Connection ok
-        print("Login OK")
-        ok = True
-    else:
-        print("Something went wrong, saving screenshot")
-        driver.save_screenshot('screenshot.png')
+    try:
+        driver.get("http://www.google.com")
+
+        if 'Google' in driver.title:
+            # Connection ok
+            print("Not captured, returning early")
+            driver.close()
+            return True
+
+        print("Waiting for form")
+        wait_for( functools.partial(element_found_by_name, driver, "username") )
+
+        print("Logging in")
+        username_input = driver.find_element_by_name("username")
+        username_input.clear()
+        username_input.send_keys(username)
+
+        password_input = driver.find_element_by_name("password")
+        password_input.clear()
+        password_input.send_keys(password)
+        with wait_for_page_load(driver):
+            password_input.send_keys(Keys.RETURN)
+
+        if 'Google' in driver.title:
+            # Connection ok
+            print("Login OK")
+            ok = True
+        else:
+            print("Something went wrong, saving screenshot and source")
+            dump_source_and_screen(driver)
+    except selenium.common.exceptions.WebDriverException:
+        dump_source_and_screen(driver)
+        driver.close()
+        raise
 
     driver.close()
     return ok
@@ -70,10 +100,10 @@ def usage(name):
     print(""""
 USage:
 
-    xvfb-run {} "username" "password"
-""")
+    xvfb-run `realpath {}` "username" "password"
+""".format(name))
 
-if __name__ == '__main__'
+if __name__ == '__main__':
     if len(sys.argv) < 3:
         usage(__file__)
         sys.exit(1)
