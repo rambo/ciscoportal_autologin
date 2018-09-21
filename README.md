@@ -1,4 +1,4 @@
-# Autologin for Cisco active portal
+# Autologin for Cisco captive portal
 
 Due to JS bullshit in the portal needs to use real browser.
 
